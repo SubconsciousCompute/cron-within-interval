@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use cron::Schedule;
+use rand::{seq::SliceRandom, Rng};
 use regex::Regex;
 
 lazy_static::lazy_static! {
@@ -71,11 +72,39 @@ impl FromStr for CronOffice {
 }
 
 impl CronOffice {
-    pub fn upcoming<Z>(&self, timezone: Z) -> cron::ScheduleIterator<'_, Z>
+    pub fn upcoming<'a, Z>(&'a self, timezone: Z) -> impl Iterator<Item = chrono::DateTime<Z>> + '_
+    where
+        Z: chrono::TimeZone + 'a,
+    {
+        self.inner
+            .upcoming(timezone)
+            .map(|datetime| self.add_constraint(&datetime))
+    }
+
+    #[inline]
+    fn add_constraint<Z>(&self, datetime: &chrono::DateTime<Z>) -> chrono::DateTime<Z>
     where
         Z: chrono::TimeZone,
     {
-        self.inner.upcoming(timezone).map(|sch| sch)
+        let mut rng = rand::thread_rng();
+        let mut result_datetime = datetime.clone();
+
+        // pick a random minute.
+        result_datetime += chrono::Duration::minutes(rng.gen_range(0..60));
+
+        if let Some(hours) = self.constraints.get("h") {
+            let chosen_internval = hours.choose(&mut rng).expect("chose one");
+            let dh = chosen_internval.random();
+            result_datetime += chrono::Duration::hours(dh.into());
+        }
+
+        if let Some(days) = self.constraints.get("d") {
+            let chosen_internval = days.choose(&mut rng).expect("chose one");
+            let dh = chosen_internval.random();
+            result_datetime += chrono::Duration::days(dh.into());
+        }
+
+        result_datetime
     }
 }
 
@@ -97,22 +126,48 @@ impl FromStr for Interval {
     }
 }
 
+impl Interval {
+    /// Generate a random value between the interval
+    fn random(&self) -> i16 {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(self.0..=self.1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     use chrono::Utc;
+    use simple_accumulator::SimpleAccumulator;
 
     #[test]
     fn test_cron_office() {
         let sch = CronOffice::from_str("@daily{h=9-17,h=21-23}").unwrap();
         println!("{sch:?}");
 
+        let mut acc = SimpleAccumulator::with_fixed_capacity::<f64>(&[], 10, true);
+
         let mut schedules = vec![];
-        for datetime in sch.upcoming(Utc).take(10) {
+        for datetime in sch.upcoming(Utc).take(100) {
             schedules.push(datetime);
-            println!("-> {datetime:?}");
+            println!("1-> {datetime:?}");
         }
+
+        assert_eq!(schedules.len(), 100);
+        for i in 1..schedules.len() {
+            let diff = schedules[i] - schedules[i - 1];
+            let n_hours = diff.num_hours();
+            println!(" num hours = {n_hours}");
+            assert!(diff.num_hours() < 48);
+            assert!(diff.num_hours() > 1);
+            acc.push(n_hours);
+        }
+
+        println!(" {acc:?}");
+        assert!(acc.mean > 20.0);
+        assert!(acc.mean < 30.0);
+        assert!(acc.variance < 100.0);
     }
 
     #[test]
@@ -121,7 +176,7 @@ mod tests {
         let mut schedules = vec![];
         for datetime in sch.upcoming(Utc).take(10) {
             schedules.push(datetime);
-            println!("-> {datetime:?}");
+            println!("2-> {datetime:?}");
         }
         assert_eq!(schedules.len(), 10);
         for i in 1..schedules.len() {
