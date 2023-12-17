@@ -56,7 +56,7 @@ impl FromStr for CronWithRandomness {
         let shorthand = &caps["shorthand"];
         let cs = &caps["constraints"];
 
-        let inner = Schedule::from_str(&shorthand)?;
+        let inner = Schedule::from_str(shorthand)?;
         let mut constraints = HashMap::new();
 
         for constraint in cs.split(',') {
@@ -191,14 +191,14 @@ mod tests {
         let sch = CronWithRandomness::from_str("@weekly{d=1-3,h=21-23}").unwrap();
         println!("{sch:?}");
 
-        let mut acc = SimpleAccumulator::with_fixed_capacity::<f64>(&[], 10, true);
+        let _acc = SimpleAccumulator::with_fixed_capacity::<f64>(&[], 10, true);
 
         let mut schedules = vec![];
         for datetime in sch.upcoming(Utc).take(100) {
             let weekday = datetime.weekday().num_days_from_sunday();
             let hour = datetime.time().hour();
-            assert!(vec![1, 2, 3].contains(&weekday));
-            assert!(vec![21, 22, 23].contains(&hour));
+            assert!([1, 2, 3].contains(&weekday));
+            assert!([21, 22, 23].contains(&hour));
             schedules.push(datetime);
             println!("--> {datetime:?} weekday={weekday:?} hour={hour:?}");
         }
