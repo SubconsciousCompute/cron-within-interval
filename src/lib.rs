@@ -35,17 +35,24 @@ lazy_static::lazy_static! {
 
 /// Wrapper around cron::Schedule
 #[derive(Debug)]
-pub struct CronOffice {
+pub struct CronWithRandomness {
+    /// inner cron schedule
     inner: cron::Schedule,
     /// Hourly constraints
     constraints: HashMap<String, Vec<Interval>>,
 }
 
-impl FromStr for CronOffice {
+impl FromStr for CronWithRandomness {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self> {
-        let caps = RE.captures(s).expect("valid pattern");
+        if !s.contains('{') {
+            return Ok(Self {
+                inner: cron::Schedule::from_str(s)?,
+                constraints: HashMap::new(),
+            });
+        }
+        let caps = RE.captures(s).expect("invalid pattern");
         let shorthand = &caps["shorthand"];
         let cs = &caps["constraints"];
 
@@ -71,7 +78,7 @@ impl FromStr for CronOffice {
     }
 }
 
-impl CronOffice {
+impl CronWithRandomness {
     pub fn upcoming<'a, Z>(&'a self, timezone: Z) -> impl Iterator<Item = chrono::DateTime<Z>> + '_
     where
         Z: chrono::TimeZone + 'a,
@@ -89,17 +96,22 @@ impl CronOffice {
         let mut rng = rand::thread_rng();
         let mut result_datetime = datetime.clone();
 
-        // pick a random minute.
+        // pick a random minute. We have to reduce one hour from the hour range after this.
         result_datetime += chrono::Duration::minutes(rng.gen_range(0..60));
 
         if let Some(hours) = self.constraints.get("h") {
             let chosen_internval = hours.choose(&mut rng).expect("chose one");
+            assert!((0..24).contains(&chosen_internval.0));
+            assert!((0..24).contains(&chosen_internval.1));
             let dh = chosen_internval.random();
             result_datetime += chrono::Duration::hours(dh.into());
         }
 
         if let Some(days) = self.constraints.get("d") {
             let chosen_internval = days.choose(&mut rng).expect("chose one");
+            // 0 and 7 stands for Sunday in cron.
+            assert!((0..8).contains(&chosen_internval.0));
+            assert!((0..8).contains(&chosen_internval.1));
             let dh = chosen_internval.random();
             result_datetime += chrono::Duration::days(dh.into());
         }
@@ -108,7 +120,7 @@ impl CronOffice {
     }
 }
 
-/// Interval (low, high)
+/// Interval [low, high)
 #[derive(Default, Debug)]
 struct Interval(i16, i16);
 
@@ -130,7 +142,8 @@ impl Interval {
     /// Generate a random value between the interval
     fn random(&self) -> i16 {
         let mut rng = rand::thread_rng();
-        rng.gen_range(self.0..=self.1)
+        // high is exclusive
+        rng.gen_range(self.0..self.1)
     }
 }
 
@@ -143,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_cron_office() {
-        let sch = CronOffice::from_str("@daily{h=9-17,h=21-23}").unwrap();
+        let sch = CronWithRandomness::from_str("@daily{h=9-17,h=21-23}").unwrap();
         println!("{sch:?}");
 
         let mut acc = SimpleAccumulator::with_fixed_capacity::<f64>(&[], 10, true);
@@ -175,7 +188,7 @@ mod tests {
         use chrono::Datelike;
         use chrono::Timelike;
 
-        let sch = CronOffice::from_str("@weekly{d=1-3,h=21-23}").unwrap();
+        let sch = CronWithRandomness::from_str("@weekly{d=1-3,h=21-23}").unwrap();
         println!("{sch:?}");
 
         let mut acc = SimpleAccumulator::with_fixed_capacity::<f64>(&[], 10, true);
