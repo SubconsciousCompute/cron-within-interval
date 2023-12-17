@@ -37,7 +37,7 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 pub struct CronWithRandomness {
     /// inner cron schedule
-    inner: cron::Schedule,
+    pub schedule: cron::Schedule,
     /// Hourly constraints
     constraints: HashMap<String, Vec<Interval>>,
 }
@@ -48,7 +48,7 @@ impl FromStr for CronWithRandomness {
     fn from_str(s: &str) -> anyhow::Result<Self> {
         if !s.contains('{') {
             return Ok(Self {
-                inner: cron::Schedule::from_str(s)?,
+                schedule: cron::Schedule::from_str(s)?,
                 constraints: HashMap::new(),
             });
         }
@@ -56,7 +56,7 @@ impl FromStr for CronWithRandomness {
         let shorthand = &caps["shorthand"];
         let cs = &caps["constraints"];
 
-        let inner = Schedule::from_str(shorthand)?;
+        let schedule = Schedule::from_str(shorthand)?;
         let mut constraints = HashMap::new();
 
         for constraint in cs.split(',') {
@@ -74,7 +74,7 @@ impl FromStr for CronWithRandomness {
                 .push(interval);
         }
 
-        Ok(Self { inner, constraints })
+        Ok(Self { schedule, constraints })
     }
 }
 
@@ -83,7 +83,7 @@ impl CronWithRandomness {
     where
         Z: chrono::TimeZone + 'a,
     {
-        self.inner
+        self.schedule
             .upcoming(timezone)
             .map(|datetime| self.add_constraint(&datetime))
     }
