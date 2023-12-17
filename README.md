@@ -1,3 +1,4 @@
+[![Build](https://github.com/SubconsciousCompute/cron-with-randomness/actions/workflows/rust.yml/badge.svg)](https://github.com/SubconsciousCompute/cron-with-randomness/actions/workflows/rust.yml)
 # cron-with-randomness
 
 Extended cron shorthand to randomly select value from given interval.
