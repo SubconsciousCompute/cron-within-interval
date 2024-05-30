@@ -47,8 +47,19 @@ impl FromStr for CronWithRandomness {
 
     fn from_str(s: &str) -> anyhow::Result<Self> {
         if !s.contains('{') {
+            // this is standard cron expression. It may have 5 fields (linux, missing seconds). Add
+            // second to 0 and continue.
+            let num_fields = s.trim().split(' ').collect::<Vec<_>>().len();
+            let expr = if num_fields == 5 {
+                format!("0 {s}") // append seconds
+            } else if num_fields == 6 {
+                s.to_string()
+            } else {
+                anyhow::bail!("expression must have 5 or 6 fields separated by space.");
+            };
+
             return Ok(Self {
-                schedule: cron::Schedule::from_str(s)?,
+                schedule: cron::Schedule::from_str(&expr)?,
                 constraints: HashMap::new(),
             });
         }
@@ -74,7 +85,10 @@ impl FromStr for CronWithRandomness {
                 .push(interval);
         }
 
-        Ok(Self { schedule, constraints })
+        Ok(Self {
+            schedule,
+            constraints,
+        })
     }
 }
 
@@ -222,7 +236,7 @@ mod tests {
     #[test]
     fn test_cron_standard() {
         // second, min, hour, day, week, month
-        let sch = CronWithRandomness::from_str("0 0 0/5 1/7 * *").unwrap();
+        let sch = CronWithRandomness::from_str("0 0/5 1/7 * *").unwrap();
         println!("{sch:?}");
     }
 }
