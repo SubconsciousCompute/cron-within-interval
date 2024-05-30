@@ -218,4 +218,11 @@ mod tests {
             assert_eq!(diff.num_hours(), 24);
         }
     }
+
+    #[test]
+    fn test_cron_standard() {
+        // second, min, hour, day, week, month
+        let sch = CronWithRandomness::from_str("0 0 0/5 1/7 * *").unwrap();
+        println!("{sch:?}");
+    }
 }
