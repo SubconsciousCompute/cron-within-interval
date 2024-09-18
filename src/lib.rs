@@ -20,7 +20,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use cron::Schedule;
-use rand::{seq::SliceRandom, Rng};
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 use regex::Regex;
 
 /// Global seed fro rngs.
@@ -112,7 +113,7 @@ impl CronWithRandomness {
     where
         Z: chrono::TimeZone,
     {
-        let mut rng = rand::StdRng::seed_from_u64(SEED);
+        let mut rng = ChaCha8Rng::seed_from_u64(SEED);
         let mut result_datetime = datetime.clone();
 
         // pick a random minute. We have to reduce one hour from the hour range after this.
@@ -160,7 +161,7 @@ impl FromStr for Interval {
 impl Interval {
     /// Generate a random value between the interval
     fn random(&self) -> i16 {
-        let mut rng = rand::StdRng::seed_from_u64(SEED);
+        let mut rng = ChaCha8Rng::seed_from_u64(SEED);
         // high is exclusive
         rng.gen_range(self.0..self.1)
     }

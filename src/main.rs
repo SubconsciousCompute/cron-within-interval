@@ -1,9 +1,8 @@
 //! Binary to generate patterns.
 
-use std::str::FromStr;
-
 use chrono::Utc;
 use cron_with_randomness::CronWithRandomness;
+use std::str::FromStr;
 
 fn main() {
     let pattern = std::env::args().nth(1).expect("no pattern given");
