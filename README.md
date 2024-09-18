@@ -4,15 +4,15 @@
 Extended cron shorthand to randomly select value from given interval. In addition to standard expression 
 supported by crate cron, this crate supports following shorthands.
 
-- `@daily{H=9-17}` means run once between 9 am and 5 pm chosen randomly.  
-- `@daily{H=9-12,H=15-20}` means run once between 9 am and 12 pm or between 3 pm and 8 pm.
+- `@daily{h=9-17}` means run once between 9 am and 5 pm chosen randomly.  
+- `@daily{h=9-12,h=15-20}` means run once between 9 am and 12 pm or between 3 pm and 8 pm.
 
 Similarly one can pass daily constraints to @weekly.
 
-- `@weekly{D=1-5}` means  run once per week between day 1 and day 5.  
-- `@weekly{D=1-5,H=9-12}` run once per week between day 1 and day 5 and between 9 am
+- `@weekly{d=1-5}` means  run once per week between day 1 and day 5.  
+- `@weekly{d=1-5,h=9-12}` run once per week between day 1 and day 5 and between 9 am
    and 12 pm.  
-- `@weekly{H=9-12}` runs once per week on any day chosen randomly and between 9 am
+- `@weekly{h=9-12}` runs once per week on any day chosen randomly and between 9 am
    and 12 pm.
 
 # Examples
@@ -20,7 +20,7 @@ Similarly one can pass daily constraints to @weekly.
 ## `@daily`
 
 ```
-$ cargo run -- @daily{9-17}
+$ cargo run -- @daily{h=9-17}
 
  --> 2023-12-18T13:17:00Z
  --> 2023-12-19T09:52:00Z
