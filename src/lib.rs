@@ -179,7 +179,7 @@ mod tests {
         let sch = CronWithRandomness::from_str("@daily{h=9-17,h=21-23}").unwrap();
         println!("{sch:?}");
 
-        let mut acc = SimpleAccumulator::with_fixed_capacity::<f64>(&[], 10, true);
+        let mut acc = SimpleAccumulator::with_fixed_capacity(&[], 10);
 
         let mut schedules = vec![];
         for datetime in sch.upcoming(Utc).take(100) {
@@ -194,13 +194,13 @@ mod tests {
             println!(" num hours = {n_hours}");
             assert!(diff.num_hours() < 48);
             assert!(diff.num_hours() > 1);
-            acc.push(n_hours);
+            acc.push(n_hours as f64);
         }
 
         println!(" {acc:?}");
-        assert!(acc.mean > 20.0);
-        assert!(acc.mean < 30.0);
-        assert!(acc.variance < 100.0);
+        assert!(acc.mean() > 20.0);
+        assert!(acc.mean() < 30.0);
+        assert!(acc.variance() < 100.0);
     }
 
     #[test]
@@ -210,8 +210,6 @@ mod tests {
 
         let sch = CronWithRandomness::from_str("@weekly{d=1-3,h=21-23}").unwrap();
         println!("{sch:?}");
-
-        let _acc = SimpleAccumulator::with_fixed_capacity::<f64>(&[], 10, true);
 
         let mut schedules = vec![];
         for datetime in sch.upcoming(Utc).take(100) {
