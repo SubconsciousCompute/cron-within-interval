@@ -1,7 +1,9 @@
-//! cron-with-randomness
+//! cron-within-interval
 //!
 //! Extended cron shorthands that support sampling from given interval. In addition to standard
 //! expression supported by excellent crate cron, we support following type of expressions.
+//!
+//! The random number is seeded so you always get the same sequence.
 //!
 //! - `@daily{h=9-17}` means run once between 9am and 5pm chosen randomly.  
 //! - `@daily{h=9-12,h=15-20}` means run once between 9am and 12pm or between 3pm and 8pm.
@@ -20,6 +22,9 @@ use std::str::FromStr;
 use cron::Schedule;
 use rand::{seq::SliceRandom, Rng};
 use regex::Regex;
+
+/// Global seed fro rngs.
+const SEED: u64 = 1443;
 
 lazy_static::lazy_static! {
     static ref RE: Regex = Regex::new(
@@ -107,7 +112,7 @@ impl CronWithRandomness {
     where
         Z: chrono::TimeZone,
     {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::StdRng::seed_from_u64(SEED);
         let mut result_datetime = datetime.clone();
 
         // pick a random minute. We have to reduce one hour from the hour range after this.
@@ -155,7 +160,7 @@ impl FromStr for Interval {
 impl Interval {
     /// Generate a random value between the interval
     fn random(&self) -> i16 {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::StdRng::seed_from_u64(SEED);
         // high is exclusive
         rng.gen_range(self.0..self.1)
     }

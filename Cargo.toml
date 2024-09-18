@@ -1,15 +1,15 @@
 [package]
-name = "cron-with-randomness"
-version = "0.0.2"
+name = "cron-within-interval"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.75"
-chrono = "0.4.31"
-cron = "0.12.0"
-lazy_static = "1.4.0"
-rand = "0.8.5"
-regex = "1.10.2"
+anyhow = "1.0"
+chrono = "0.4"
+cron = "0.12"
+lazy_static = "1.5"
+rand = "0.8"
+regex = "1.10"
 
 [dev-dependencies]
-simple_accumulator = "0.5.0"
+simple_accumulator = "0.7.0"
