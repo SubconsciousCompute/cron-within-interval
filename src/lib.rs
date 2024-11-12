@@ -110,22 +110,35 @@ impl CronWithRandomness {
         Z: chrono::TimeZone + 'a,
     {
         tracing::debug!("{:?}", self.constraints);
+
+        // if constraints are empty then nothing is constrained.
+        let is_minute_constrained = if self.constraints.is_empty() {
+            None
+        } else {
+            Some(self.constraints.get("m").is_some())
+        };
+
         self.schedule
             .upcoming(timezone)
-            .map(|datetime| self.add_constraint(&datetime))
+            .map(move |datetime| self.add_constraint(&datetime, is_minute_constrained))
     }
 
     #[inline]
-    fn add_constraint<Z>(&self, datetime: &chrono::DateTime<Z>) -> chrono::DateTime<Z>
+    fn add_constraint<Z>(
+        &self,
+        datetime: &chrono::DateTime<Z>,
+        is_minutes_constrained: Option<bool>,
+    ) -> chrono::DateTime<Z>
     where
         Z: chrono::TimeZone,
     {
         let mut result_datetime = datetime.clone();
 
-        // // pick a random minute. We have to reduce one hour from the hour range after this.
-        // if noisy_minute {
-        //     result_datetime += chrono::Duration::minutes(rng.gen_range(0..60));
-        // }
+        // If minutes are not constrained then pick a random minute.
+        if is_minutes_constrained == Some(false) {
+            result_datetime +=
+                chrono::Duration::minutes(RNG.with_borrow_mut(|rng| rng.gen_range(0..60)));
+        }
 
         if let Some(hours) = self.constraints.get("h") {
             let chosen_internval = RNG.with_borrow_mut(|rng| hours.choose(rng).expect("chose one"));
