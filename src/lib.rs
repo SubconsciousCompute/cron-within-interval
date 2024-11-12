@@ -99,7 +99,7 @@ impl FromStr for CronWithRandomness {
 }
 
 impl CronWithRandomness {
-    pub fn upcoming<'a, Z>(&'a self, timezone: Z) -> impl Iterator<Item = chrono::DateTime<Z>> + '_
+    pub fn upcoming<'a, Z>(&'a self, timezone: Z) -> impl Iterator<Item = chrono::DateTime<Z>> + 'a
     where
         Z: chrono::TimeZone + 'a,
     {
@@ -116,8 +116,10 @@ impl CronWithRandomness {
         let mut rng = ChaCha8Rng::seed_from_u64(SEED);
         let mut result_datetime = datetime.clone();
 
-        // pick a random minute. We have to reduce one hour from the hour range after this.
-        result_datetime += chrono::Duration::minutes(rng.gen_range(0..60));
+        // // pick a random minute. We have to reduce one hour from the hour range after this.
+        // if noisy_minute {
+        //     result_datetime += chrono::Duration::minutes(rng.gen_range(0..60));
+        // }
 
         if let Some(hours) = self.constraints.get("h") {
             let chosen_internval = hours.choose(&mut rng).expect("chose one");
@@ -223,12 +225,13 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn test_cron_sanity() {
         let sch = Schedule::from_str("@daily").unwrap();
         let mut schedules = vec![];
         for datetime in sch.upcoming(Utc).take(10) {
             schedules.push(datetime);
-            println!("2-> {datetime:?}");
+            tracing::debug!("2-> {datetime:?}");
         }
         assert_eq!(schedules.len(), 10);
         for i in 1..schedules.len() {
@@ -238,9 +241,44 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn test_cron_standard() {
+        use chrono::Timelike;
+        use chrono::Datelike;
+
         // second, min, hour, day, week, month
         let sch = CronWithRandomness::from_str("0 0/5 1/7 * *").unwrap();
-        println!("{sch:?}");
+        tracing::debug!("{sch:?}");
+        for datetime in sch.upcoming(Utc).take(10) {
+            tracing::debug!("2-> {datetime:?}");
+            let time = datetime.time();
+            assert_eq!(time.minute(), 0);
+            assert_eq!(time.hour().rem_euclid(5), 0);
+
+            let date = datetime.day();
+            assert_eq!(date.rem_euclid(7), 1);
+        }
+    }
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_cron_fixed_time() {
+        use chrono::Timelike;
+
+        // second, min, hour, day, week, month
+        let sch = CronWithRandomness::from_str("0 12 * * *").unwrap();
+        for datetime in sch.upcoming(Utc).take(10) {
+            tracing::debug!("{datetime:?}, time: {:?}", datetime.time());
+            assert_eq!(datetime.time().minute(), 0);
+        }
+
+        let sch = CronWithRandomness::from_str("* 12 * * *").unwrap();
+
+        let mut min = 0;
+        for datetime in sch.upcoming(Utc).take(10) {
+            tracing::debug!("{datetime:?}, time: {:?}", datetime.time());
+            assert_eq!(datetime.time().minute(), min);
+            min += 1;
+        }
     }
 }
