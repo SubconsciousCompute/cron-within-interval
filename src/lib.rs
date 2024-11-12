@@ -16,6 +16,7 @@
 //! - `@weekly{h=9-12}` run once per week at any day chosen randomly and between 9am
 //!    and 12pm.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -39,12 +40,16 @@ lazy_static::lazy_static! {
     .unwrap();
 }
 
+thread_local! {
+    static RNG: RefCell<ChaCha8Rng> = RefCell::new(ChaCha8Rng::seed_from_u64(SEED));
+}
+
 /// Wrapper around cron::Schedule
 #[derive(Debug)]
 pub struct CronWithRandomness {
     /// inner cron schedule
     pub schedule: cron::Schedule,
-    /// Hourly constraints
+    /// Constraints
     constraints: HashMap<String, Vec<Interval>>,
 }
 
@@ -57,7 +62,7 @@ impl FromStr for CronWithRandomness {
             // second to 0 and continue.
             let num_fields = s.trim().split(' ').collect::<Vec<_>>().len();
             let expr = if num_fields == 5 {
-                format!("0 {s}") // append seconds
+                format!("0 {s}") // prepend seconds
             } else if num_fields == 6 {
                 s.to_string()
             } else {
@@ -85,6 +90,7 @@ impl FromStr for CronWithRandomness {
                 .parse()
                 .expect("valid interval");
 
+            tracing::trace!("Adding constraint at key {key}, value={interval:?}");
             constraints
                 .entry(key.to_string())
                 .or_insert(vec![])
@@ -103,6 +109,7 @@ impl CronWithRandomness {
     where
         Z: chrono::TimeZone + 'a,
     {
+        tracing::debug!("{:?}", self.constraints);
         self.schedule
             .upcoming(timezone)
             .map(|datetime| self.add_constraint(&datetime))
@@ -113,7 +120,6 @@ impl CronWithRandomness {
     where
         Z: chrono::TimeZone,
     {
-        let mut rng = ChaCha8Rng::seed_from_u64(SEED);
         let mut result_datetime = datetime.clone();
 
         // // pick a random minute. We have to reduce one hour from the hour range after this.
@@ -122,15 +128,16 @@ impl CronWithRandomness {
         // }
 
         if let Some(hours) = self.constraints.get("h") {
-            let chosen_internval = hours.choose(&mut rng).expect("chose one");
+            let chosen_internval = RNG.with_borrow_mut(|rng| hours.choose(rng).expect("chose one"));
             assert!((0..24).contains(&chosen_internval.0));
             assert!((0..24).contains(&chosen_internval.1));
             let dh = chosen_internval.random();
+            tracing::debug!("Found h constraint: {dh:?}, chosen_internval: {chosen_internval:?}");
             result_datetime += chrono::Duration::hours(dh.into());
         }
 
         if let Some(days) = self.constraints.get("d") {
-            let chosen_internval = days.choose(&mut rng).expect("chose one");
+            let chosen_internval = RNG.with_borrow_mut(|rng| days.choose(rng).expect("chose one"));
             // 0 and 7 stands for Sunday in cron.
             assert!((0..8).contains(&chosen_internval.0));
             assert!((0..8).contains(&chosen_internval.1));
@@ -163,9 +170,8 @@ impl FromStr for Interval {
 impl Interval {
     /// Generate a random value between the interval
     fn random(&self) -> i16 {
-        let mut rng = ChaCha8Rng::seed_from_u64(SEED);
         // high is exclusive
-        rng.gen_range(self.0..self.1)
+        RNG.with_borrow_mut(|rng| rng.gen_range(self.0..self.1))
     }
 }
 
@@ -177,23 +183,28 @@ mod tests {
     use simple_accumulator::SimpleAccumulator;
 
     #[test]
+    #[tracing_test::traced_test]
     fn test_cron_office() {
+        use chrono::Timelike;
+
         let sch = CronWithRandomness::from_str("@daily{h=9-17,h=21-23}").unwrap();
-        println!("{sch:?}");
+        tracing::debug!("{sch:?}");
 
         let mut acc = SimpleAccumulator::with_fixed_capacity(&[], 10);
 
         let mut schedules = vec![];
         for datetime in sch.upcoming(Utc).take(100) {
+            tracing::debug!("{datetime:?}");
             schedules.push(datetime);
-            println!("1-> {datetime:?}");
+
+            let time = datetime.time();
+            assert!((9..17).contains(&time.hour()) || (21..23).contains(&time.hour()));
         }
 
-        assert_eq!(schedules.len(), 100);
         for i in 1..schedules.len() {
             let diff = schedules[i] - schedules[i - 1];
             let n_hours = diff.num_hours();
-            println!(" num hours = {n_hours}");
+            tracing::debug!(" num hours = {n_hours}");
             assert!(diff.num_hours() < 48);
             assert!(diff.num_hours() > 1);
             acc.push(n_hours as f64);
@@ -203,6 +214,11 @@ mod tests {
         assert!(acc.mean() > 20.0);
         assert!(acc.mean() < 30.0);
         assert!(acc.variance() < 100.0);
+        assert!(
+            acc.variance() > 1.0,
+            "Expecting some variance since values will be different. variance={}",
+            acc.variance()
+        );
     }
 
     #[test]
@@ -227,11 +243,19 @@ mod tests {
     #[test]
     #[tracing_test::traced_test]
     fn test_cron_sanity() {
+        use chrono::Timelike;
+
+        // this is standard cron expression.
         let sch = Schedule::from_str("@daily").unwrap();
+        tracing::debug!("sch: {sch:#?}");
+
         let mut schedules = vec![];
         for datetime in sch.upcoming(Utc).take(10) {
-            schedules.push(datetime);
             tracing::debug!("2-> {datetime:?}");
+
+            schedules.push(datetime);
+            assert_eq!(datetime.time().minute(), 0);
+            assert_eq!(datetime.time().hour(), 0);
         }
         assert_eq!(schedules.len(), 10);
         for i in 1..schedules.len() {
@@ -243,8 +267,8 @@ mod tests {
     #[test]
     #[tracing_test::traced_test]
     fn test_cron_standard() {
-        use chrono::Timelike;
         use chrono::Datelike;
+        use chrono::Timelike;
 
         // second, min, hour, day, week, month
         let sch = CronWithRandomness::from_str("0 0/5 1/7 * *").unwrap();
